@@ -13,6 +13,8 @@
 
 static const char *TAG = "main";
 
+LV_FONT_DECLARE(lv_font_simsun_16_cjk);
+
 // UI 元素指针
 static lv_obj_t *s_battery_label = NULL;
 static lv_obj_t *s_battery_bar = NULL;
