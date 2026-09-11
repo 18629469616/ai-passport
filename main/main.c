@@ -303,7 +303,7 @@ static void build_ui(void)
     lv_obj_set_style_bg_color(card_act, lv_color_hex(0x020617), 0);
     lv_obj_set_style_border_color(card_act, lv_color_hex(0x1E293B), 0);
     lv_obj_set_style_border_width(card_act, 1, 0);
-    lv_obj_set_style_radius(8, 0);
+    lv_obj_set_style_radius(card_act, 8, 0);
     lv_obj_set_scrollbar_mode(card_act, LV_SCROLLBAR_MODE_OFF);
 
     s_counter_label = lv_label_create(card_act);
