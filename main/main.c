@@ -58,23 +58,25 @@ static void on_button_event(bsp_btn_t btn, bsp_btn_ev_t ev, void *arg)
         }
         break;
 
-    case BSP_BTN_OK:
+    // 中间物理按键 (硬件分压 1k，驱动产生 BSP_BTN_DOWN)
+    case BSP_BTN_DOWN:
         if (ev == BSP_BTN_CLICK) {
-            ESP_LOGI(TAG, "OK Click -> Enter (Submit Prompt)");
+            ESP_LOGI(TAG, "MID Click -> Enter (Submit Prompt)");
             ble_hid_key_press(HID_KEY_RETURN);
             update_action_feedback("[Send] Enter", 0x38BDF8);
         } else if (ev == BSP_BTN_DOUBLE) {
-            ESP_LOGI(TAG, "OK Double Click -> Shift + Enter (Newline)");
+            ESP_LOGI(TAG, "MID Double Click -> Shift + Enter (Newline)");
             ble_hid_key_press_mod(HID_MOD_LEFT_SHIFT, HID_KEY_RETURN);
             update_action_feedback("[Newline] Shift+Enter", 0x818CF8);
         } else if (ev == BSP_BTN_LONG) {
-            ESP_LOGI(TAG, "OK Long -> Escape (Cancel / Exit)");
+            ESP_LOGI(TAG, "MID Long -> Escape (Cancel / Exit)");
             ble_hid_key_press(HID_KEY_ESCAPE);
             update_action_feedback("[Cancel] Escape", 0xF472B6);
         }
         break;
 
-    case BSP_BTN_DOWN:
+    // 最底物理按键 (硬件分压 2.2k，驱动产生 BSP_BTN_OK)
+    case BSP_BTN_OK:
         if (ev == BSP_BTN_CLICK) {
             ESP_LOGI(TAG, "DOWN Click -> Backspace (Del Char)");
             ble_hid_key_press(HID_KEY_BACKSPACE);
@@ -194,7 +196,7 @@ static void build_ui(void)
     lv_obj_align(hint_up, LV_ALIGN_TOP_LEFT, 6, 8);
 
     lv_obj_t *hint_ok = lv_label_create(card_guide);
-    lv_label_set_text(hint_ok, "OK   | Enter / Shift+Ent");
+    lv_label_set_text(hint_ok, "MID  | Enter / Shift+Ent");
     lv_obj_set_style_text_color(hint_ok, lv_color_hex(0x38BDF8), 0);
     lv_obj_set_style_text_font(hint_ok, &lv_font_montserrat_14, 0);
     lv_obj_align(hint_ok, LV_ALIGN_LEFT_MID, 6, 0);
