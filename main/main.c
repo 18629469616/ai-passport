@@ -1,4 +1,4 @@
-// main/main.c — FoloToy AI Passport BLE HID Keyboard (VibeCoding Pro Edition)
+// main/main.c — FoloToy AI Passport BLE HID Keyboard (Linear Dark Tech Edition)
 #include "bsp_i2c.h"
 #include "bsp_battery.h"
 #include "bsp_display.h"
@@ -18,8 +18,8 @@ static lv_obj_t *s_battery_label = NULL;
 static lv_obj_t *s_battery_bar = NULL;
 static lv_obj_t *s_conn_status_label = NULL;
 static lv_obj_t *s_conn_hint_label = NULL;
-static lv_obj_t *s_counter_label = NULL;
-static lv_obj_t *s_action_label = NULL;
+static lv_obj_t *s_counter_val_label = NULL;
+static lv_obj_t *s_action_val_label = NULL;
 static lv_timer_t *s_status_timer = NULL;
 
 // 状态变量
@@ -32,7 +32,7 @@ static uint32_t s_last_active_tick = 0;
 static uint8_t s_current_brightness = 100;
 
 // ================================================================
-// 背光快速节能休眠管理 (10秒变暗，20秒全黑熄屏，按键秒唤醒)
+// 背光快速节能休眠管理 (10秒变暗，20秒彻底熄屏，按键瞬间唤醒)
 // ================================================================
 static void reset_activity(void)
 {
@@ -45,7 +45,7 @@ static void reset_activity(void)
 
 static void update_power_saving(void)
 {
-    // 如果正在录音说话，保持常亮不休眠
+    // 如果正在录音说话，保持常亮
     if (s_recording) {
         reset_activity();
         return;
@@ -53,7 +53,7 @@ static void update_power_saving(void)
 
     uint32_t elapsed_sec = (xTaskGetTickCount() - s_last_active_tick) / configTICK_RATE_HZ;
 
-    // 20 秒无操作 -> 彻底关闭背光（全黑省电，电池续航翻倍）
+    // 20 秒无操作 -> 彻底关闭背光熄屏（黑屏省电，功耗降 80%）
     if (elapsed_sec >= 20) {
         if (s_current_brightness != 0) {
             s_current_brightness = 0;
@@ -70,14 +70,14 @@ static void update_power_saving(void)
 }
 
 // ================================================================
-// 按键响应回调 (运行在 button 驱动任务中，必须保持非阻塞)
+// 实时按键操作反馈更新
 // ================================================================
 static void update_action_feedback(const char *text, uint32_t color_hex)
 {
     if (bsp_lvgl_lock(200)) {
-        if (s_action_label) {
-            lv_label_set_text(s_action_label, text);
-            lv_obj_set_style_text_color(s_action_label, lv_color_hex(color_hex), 0);
+        if (s_action_val_label) {
+            lv_label_set_text(s_action_val_label, text);
+            lv_obj_set_style_text_color(s_action_val_label, lv_color_hex(color_hex), 0);
         }
         bsp_lvgl_unlock();
     }
@@ -97,18 +97,18 @@ static void on_button_event(bsp_btn_t btn, bsp_btn_ev_t ev, void *arg)
             s_recording = !s_recording;
             if (s_recording) {
                 s_record_start_tick = xTaskGetTickCount();
-                update_action_feedback("[Voice] Listening...", 0x4ADE80);
+                update_action_feedback("Voice On", 0x10B981);
             } else {
-                update_action_feedback("[Voice] Closed", 0x94A3B8);
+                update_action_feedback("Voice Off", 0x64748B);
             }
         } else if (ev == BSP_BTN_DOUBLE) {
             ESP_LOGI(TAG, "UP Double Click -> Win + H (Win Dictation)");
             ble_hid_key_press_mod(HID_MOD_LEFT_GUI, HID_KEY_H);
-            update_action_feedback("[Win Dictation] Win+H", 0x60A5FA);
+            update_action_feedback("Win+H Voice", 0x38BDF8);
         } else if (ev == BSP_BTN_LONG) {
             ESP_LOGI(TAG, "UP Long -> Left Ctrl + Left Win");
             ble_hid_key_press_mod(HID_MOD_LEFT_CTRL | HID_MOD_LEFT_GUI, HID_KEY_NONE);
-            update_action_feedback("[Voice] Ctrl+Win", 0xA78BFA);
+            update_action_feedback("Ctrl+Win", 0xA78BFA);
         }
         break;
 
@@ -119,16 +119,16 @@ static void on_button_event(bsp_btn_t btn, bsp_btn_ev_t ev, void *arg)
             ble_hid_key_press(HID_KEY_RETURN);
             s_recording = false;
             s_prompt_count++;
-            update_action_feedback("[Send] Enter Prompt", 0x38BDF8);
+            update_action_feedback("Enter Send", 0x06B6D4);
         } else if (ev == BSP_BTN_DOUBLE) {
             ESP_LOGI(TAG, "MID Double Click -> Shift + Enter (Newline)");
             ble_hid_key_press_mod(HID_MOD_LEFT_SHIFT, HID_KEY_RETURN);
-            update_action_feedback("[Newline] Shift+Enter", 0x818CF8);
+            update_action_feedback("Shift+Enter", 0x818CF8);
         } else if (ev == BSP_BTN_LONG) {
             ESP_LOGI(TAG, "MID Long -> Escape (Cancel / Exit)");
             ble_hid_key_press(HID_KEY_ESCAPE);
             s_recording = false;
-            update_action_feedback("[Cancel] Escape", 0xF472B6);
+            update_action_feedback("Escape", 0xF472B6);
         }
         break;
 
@@ -137,15 +137,15 @@ static void on_button_event(bsp_btn_t btn, bsp_btn_ev_t ev, void *arg)
         if (ev == BSP_BTN_CLICK) {
             ESP_LOGI(TAG, "DOWN Click -> Backspace (Del Char)");
             ble_hid_key_press(HID_KEY_BACKSPACE);
-            update_action_feedback("[Del] Backspace", 0xFB923C);
+            update_action_feedback("Backspace", 0xF59E0B);
         } else if (ev == BSP_BTN_DOUBLE) {
             ESP_LOGI(TAG, "DOWN Double Click -> Ctrl + Backspace (Del Word)");
             ble_hid_key_press_mod(HID_MOD_LEFT_CTRL, HID_KEY_BACKSPACE);
-            update_action_feedback("[Del Word] Ctrl+BS", 0xF97316);
+            update_action_feedback("Del Word", 0xFB923C);
         } else if (ev == BSP_BTN_LONG) {
             ESP_LOGI(TAG, "DOWN Long -> Clear All (Ctrl+A then Backspace)");
             ble_hid_clear_all_text();
-            update_action_feedback("[Clear] All Cleared", 0xEF4444);
+            update_action_feedback("All Cleared", 0xEF4444);
         }
         break;
     }
@@ -162,52 +162,48 @@ static void status_timer_cb(lv_timer_t *timer)
 
     bool connected = ble_hid_is_connected();
 
-    // 录音计时状态优先展示
+    // 录音计时模式优先展示
     if (s_recording && connected) {
         uint32_t rec_sec = (xTaskGetTickCount() - s_record_start_tick) / configTICK_RATE_HZ;
-        lv_label_set_text_fmt(s_conn_status_label, "VOICE %02lu:%02lu", (unsigned long)(rec_sec / 60), (unsigned long)(rec_sec % 60));
-        lv_obj_set_style_text_color(s_conn_status_label, lv_color_hex(0xFF5252), 0);
-        lv_label_set_text(s_conn_hint_label, "Speaking... Press MID to Send");
+        lv_label_set_text_fmt(s_conn_status_label, "%02lu:%02lu", (unsigned long)(rec_sec / 60), (unsigned long)(rec_sec % 60));
+        lv_obj_set_style_text_font(s_conn_status_label, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_color(s_conn_status_label, lv_color_hex(0xEF4444), 0);
+        lv_label_set_text(s_conn_hint_label, "Listening... Press MID to Send");
         lv_obj_set_style_text_color(s_conn_hint_label, lv_color_hex(0xFDE047), 0);
     } else {
         if (connected != s_last_connected || !s_recording) {
             s_last_connected = connected;
+            lv_obj_set_style_text_font(s_conn_status_label, &lv_font_montserrat_20, 0);
             if (connected) {
-                char peer_str[24] = {0};
-                ble_hid_get_peer_str(peer_str, sizeof(peer_str));
                 lv_label_set_text(s_conn_status_label, "CONNECTED");
-                lv_obj_set_style_text_color(s_conn_status_label, lv_color_hex(0x00E676), 0);
-                if (peer_str[0]) {
-                    lv_label_set_text_fmt(s_conn_hint_label, "Host: %s", peer_str);
-                } else {
-                    lv_label_set_text(s_conn_hint_label, "Ready for VibeCoding");
-                }
+                lv_obj_set_style_text_color(s_conn_status_label, lv_color_hex(0x10B981), 0);
+                lv_label_set_text(s_conn_hint_label, "Ready for VibeCoding");
                 lv_obj_set_style_text_color(s_conn_hint_label, lv_color_hex(0x94A3B8), 0);
             } else {
-                lv_label_set_text(s_conn_status_label, "WAITING...");
-                lv_obj_set_style_text_color(s_conn_status_label, lv_color_hex(0xFFB300), 0);
+                lv_label_set_text(s_conn_status_label, "WAITING");
+                lv_obj_set_style_text_color(s_conn_status_label, lv_color_hex(0xF59E0B), 0);
                 lv_label_set_text(s_conn_hint_label, "Pair: Passport-Key");
-                lv_obj_set_style_text_color(s_conn_hint_label, lv_color_hex(0xCBD5E1), 0);
+                lv_obj_set_style_text_color(s_conn_hint_label, lv_color_hex(0x64748B), 0);
             }
         }
     }
 
     // 更新 Prompt 统计
-    if (s_counter_label) {
-        lv_label_set_text_fmt(s_counter_label, "Prompts: %lu", (unsigned long)s_prompt_count);
+    if (s_counter_val_label) {
+        lv_label_set_text_fmt(s_counter_val_label, "# %lu", (unsigned long)s_prompt_count);
     }
 
-    // 电量与电量条更新
+    // 电量与电量条更新 (无重叠)
     int soc = bsp_battery_soc();
     if (soc >= 0 && soc != s_last_battery_soc) {
         s_last_battery_soc = soc;
-        lv_label_set_text_fmt(s_battery_label, "BAT %d%%", soc);
+        lv_label_set_text_fmt(s_battery_label, "%d%%", soc);
         if (s_battery_bar) {
             lv_bar_set_value(s_battery_bar, soc, LV_ANIM_ON);
             if (soc > 50) {
-                lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0x4ADE80), LV_PART_INDICATOR);
+                lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0x10B981), LV_PART_INDICATOR);
             } else if (soc > 20) {
-                lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0x38BDF8), LV_PART_INDICATOR);
+                lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0x06B6D4), LV_PART_INDICATOR);
             } else {
                 lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0xEF4444), LV_PART_INDICATOR);
             }
@@ -222,101 +218,152 @@ static void status_timer_cb(lv_timer_t *timer)
 static void build_ui(void)
 {
     lv_obj_t *scr = lv_scr_act();
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x0A0F1D), 0);
+    // Linear 风格夜幕黑背景 (深沉高级，不刺眼)
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x08090A), 0);
 
-    // 顶部状态栏
+    // ============================================================
+    // 1. 顶部 Header (Y: 8 to 28)
+    // ============================================================
     lv_obj_t *title = lv_label_create(scr);
     lv_label_set_text(title, "Passport-Key");
     lv_obj_set_style_text_color(title, lv_color_hex(0x38BDF8), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 12, 10);
+    lv_obj_set_pos(title, 14, 10);
 
-    // 电量显示与迷你电量条
+    // 电量数字 (靠最右，x=198)
     s_battery_label = lv_label_create(scr);
-    lv_label_set_text(s_battery_label, "BAT --");
-    lv_obj_set_style_text_color(s_battery_label, lv_color_hex(0x38BDF8), 0);
+    lv_label_set_text(s_battery_label, "--%");
+    lv_obj_set_style_text_color(s_battery_label, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(s_battery_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_battery_label, LV_ALIGN_TOP_RIGHT, -12, 10);
+    lv_obj_set_pos(s_battery_label, 196, 10);
 
+    // 电量胶囊柱状图 (放在数字左侧，x=164, y=14, 宽24，高8，完全不重叠)
     s_battery_bar = lv_bar_create(scr);
-    lv_obj_set_size(s_battery_bar, 30, 8);
-    lv_obj_align_to(s_battery_bar, s_battery_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
+    lv_obj_set_pos(s_battery_bar, 164, 14);
+    lv_obj_set_size(s_battery_bar, 26, 7);
     lv_bar_set_range(s_battery_bar, 0, 100);
     lv_bar_set_value(s_battery_bar, 100, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0x1E293B), 0);
-    lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0x4ADE80), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0x1E2638), 0);
+    lv_obj_set_style_border_color(s_battery_bar, lv_color_hex(0x334155), 0);
+    lv_obj_set_style_border_width(s_battery_bar, 1, 0);
+    lv_obj_set_style_radius(s_battery_bar, 2, 0);
+    lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(0x10B981), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(s_battery_bar, 1, LV_PART_INDICATOR);
 
-    // 卡片 1: 连接 / 语音状态展示 (Y: 36, H: 86)
+    // ============================================================
+    // 2. 主状态展示卡片 (Y: 36, H: 86, W: 216, X: 12)
+    // ============================================================
     lv_obj_t *card_conn = lv_obj_create(scr);
+    lv_obj_set_pos(card_conn, 12, 36);
     lv_obj_set_size(card_conn, 216, 86);
-    lv_obj_align(card_conn, LV_ALIGN_TOP_MID, 0, 36);
-    lv_obj_set_style_bg_color(card_conn, lv_color_hex(0x161F30), 0);
-    lv_obj_set_style_border_color(card_conn, lv_color_hex(0x283548), 0);
+    lv_obj_set_style_bg_color(card_conn, lv_color_hex(0x111622), 0);
+    lv_obj_set_style_border_color(card_conn, lv_color_hex(0x1E293B), 0);
     lv_obj_set_style_border_width(card_conn, 1, 0);
     lv_obj_set_style_radius(card_conn, 10, 0);
     lv_obj_set_scrollbar_mode(card_conn, LV_SCROLLBAR_MODE_OFF);
 
     s_conn_status_label = lv_label_create(card_conn);
-    lv_label_set_text(s_conn_status_label, "WAITING...");
-    lv_obj_set_style_text_color(s_conn_status_label, lv_color_hex(0xFFB300), 0);
+    lv_label_set_text(s_conn_status_label, "WAITING");
+    lv_obj_set_style_text_color(s_conn_status_label, lv_color_hex(0xF59E0B), 0);
     lv_obj_set_style_text_font(s_conn_status_label, &lv_font_montserrat_20, 0);
     lv_obj_align(s_conn_status_label, LV_ALIGN_TOP_MID, 0, 8);
 
     s_conn_hint_label = lv_label_create(card_conn);
     lv_label_set_text(s_conn_hint_label, "Pair: Passport-Key");
-    lv_obj_set_style_text_color(s_conn_hint_label, lv_color_hex(0xCBD5E1), 0);
+    lv_obj_set_style_text_color(s_conn_hint_label, lv_color_hex(0x64748B), 0);
     lv_obj_set_style_text_font(s_conn_hint_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_conn_hint_label, LV_ALIGN_BOTTOM_MID, 0, -6);
+    lv_obj_align(s_conn_hint_label, LV_ALIGN_BOTTOM_MID, 0, -8);
 
-    // 卡片 2: 按键指南 (Y: 130, H: 120)
+    // ============================================================
+    // 3. 极简按键指南卡片 (Y: 130, H: 114, W: 216, X: 12)
+    // 两列排版，永不超屏，清爽干净！
+    // ============================================================
     lv_obj_t *card_guide = lv_obj_create(scr);
-    lv_obj_set_size(card_guide, 216, 120);
-    lv_obj_align(card_guide, LV_ALIGN_TOP_MID, 0, 130);
-    lv_obj_set_style_bg_color(card_guide, lv_color_hex(0x161F30), 0);
-    lv_obj_set_style_border_color(card_guide, lv_color_hex(0x283548), 0);
+    lv_obj_set_pos(card_guide, 12, 130);
+    lv_obj_set_size(card_guide, 216, 114);
+    lv_obj_set_style_bg_color(card_guide, lv_color_hex(0x111622), 0);
+    lv_obj_set_style_border_color(card_guide, lv_color_hex(0x1E293B), 0);
     lv_obj_set_style_border_width(card_guide, 1, 0);
     lv_obj_set_style_radius(card_guide, 10, 0);
     lv_obj_set_scrollbar_mode(card_guide, LV_SCROLLBAR_MODE_OFF);
 
-    lv_obj_t *hint_up = lv_label_create(card_guide);
-    lv_label_set_text(hint_up, "UP   | WeChat Voice (Ctrl+F10)");
-    lv_obj_set_style_text_color(hint_up, lv_color_hex(0x4ADE80), 0);
-    lv_obj_set_style_text_font(hint_up, &lv_font_montserrat_14, 0);
-    lv_obj_align(hint_up, LV_ALIGN_TOP_LEFT, 6, 8);
+    // 行 1: UP 键
+    lv_obj_t *tag_up = lv_label_create(card_guide);
+    lv_label_set_text(tag_up, "UP");
+    lv_obj_set_style_text_color(tag_up, lv_color_hex(0x10B981), 0);
+    lv_obj_set_style_text_font(tag_up, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(tag_up, 4, 8);
 
-    lv_obj_t *hint_mid = lv_label_create(card_guide);
-    lv_label_set_text(hint_mid, "MID  | Send / Enter (Shift+Ent)");
-    lv_obj_set_style_text_color(hint_mid, lv_color_hex(0x38BDF8), 0);
-    lv_obj_set_style_text_font(hint_mid, &lv_font_montserrat_14, 0);
-    lv_obj_align(hint_mid, LV_ALIGN_LEFT_MID, 6, 0);
+    lv_obj_t *act_up = lv_label_create(card_guide);
+    lv_label_set_text(act_up, "Voice Dictation");
+    lv_obj_set_style_text_color(act_up, lv_color_hex(0xF1F5F9), 0);
+    lv_obj_set_style_text_font(act_up, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(act_up, 38, 8);
 
-    lv_obj_t *hint_dn = lv_label_create(card_guide);
-    lv_label_set_text(hint_dn, "DOWN | Backspace (Clear All)");
-    lv_obj_set_style_text_color(hint_dn, lv_color_hex(0xFB923C), 0);
-    lv_obj_set_style_text_font(hint_dn, &lv_font_montserrat_14, 0);
-    lv_obj_align(hint_dn, LV_ALIGN_BOTTOM_LEFT, 6, -8);
+    // 行 2: MID 键
+    lv_obj_t *tag_mid = lv_label_create(card_guide);
+    lv_label_set_text(tag_mid, "MID");
+    lv_obj_set_style_text_color(tag_mid, lv_color_hex(0x06B6D4), 0);
+    lv_obj_set_style_text_font(tag_mid, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(tag_mid, 4, 40);
 
-    // 底部卡片 3: 实时操作与 Prompt 统计 (Y: 260, H: 48)
+    lv_obj_t *act_mid = lv_label_create(card_guide);
+    lv_label_set_text(act_mid, "Send / Newline");
+    lv_obj_set_style_text_color(act_mid, lv_color_hex(0xF1F5F9), 0);
+    lv_obj_set_style_text_font(act_mid, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(act_mid, 38, 40);
+
+    // 行 3: DOWN 键
+    lv_obj_t *tag_dn = lv_label_create(card_guide);
+    lv_label_set_text(tag_dn, "DN");
+    lv_obj_set_style_text_color(tag_dn, lv_color_hex(0xF59E0B), 0);
+    lv_obj_set_style_text_font(tag_dn, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(tag_dn, 4, 72);
+
+    lv_obj_t *act_dn = lv_label_create(card_guide);
+    lv_label_set_text(act_dn, "Delete / Clear");
+    lv_obj_set_style_text_color(act_dn, lv_color_hex(0xF1F5F9), 0);
+    lv_obj_set_style_text_font(act_dn, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(act_dn, 38, 72);
+
+    // ============================================================
+    // 4. 底部状态与 Prompt 统计卡片 (Y: 252, H: 54, W: 216, X: 12)
+    // 左右分列，彻底杜绝文字重叠！
+    // ============================================================
     lv_obj_t *card_act = lv_obj_create(scr);
-    lv_obj_set_size(card_act, 216, 48);
-    lv_obj_align(card_act, LV_ALIGN_BOTTOM_MID, 0, -10);
-    lv_obj_set_style_bg_color(card_act, lv_color_hex(0x020617), 0);
-    lv_obj_set_style_border_color(card_act, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_pos(card_act, 12, 252);
+    lv_obj_set_size(card_act, 216, 54);
+    lv_obj_set_style_bg_color(card_act, lv_color_hex(0x0D111A), 0);
+    lv_obj_set_style_border_color(card_act, lv_color_hex(0x1E2638), 0);
     lv_obj_set_style_border_width(card_act, 1, 0);
     lv_obj_set_style_radius(card_act, 8, 0);
     lv_obj_set_scrollbar_mode(card_act, LV_SCROLLBAR_MODE_OFF);
 
-    s_counter_label = lv_label_create(card_act);
-    lv_label_set_text(s_counter_label, "Prompts: 0");
-    lv_obj_set_style_text_color(s_counter_label, lv_color_hex(0xA855F7), 0);
-    lv_obj_set_style_text_font(s_counter_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_counter_label, LV_ALIGN_LEFT_MID, 8, 0);
+    // 左侧：Prompt 统计
+    lv_obj_t *lbl_counter_tag = lv_label_create(card_act);
+    lv_label_set_text(lbl_counter_tag, "PROMPTS");
+    lv_obj_set_style_text_color(lbl_counter_tag, lv_color_hex(0x64748B), 0);
+    lv_obj_set_style_text_font(lbl_counter_tag, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(lbl_counter_tag, 6, 2);
 
-    s_action_label = lv_label_create(card_act);
-    lv_label_set_text(s_action_label, "Ready");
-    lv_obj_set_style_text_color(s_action_label, lv_color_hex(0x94A3B8), 0);
-    lv_obj_set_style_text_font(s_action_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_action_label, LV_ALIGN_RIGHT_MID, -8, 0);
+    s_counter_val_label = lv_label_create(card_act);
+    lv_label_set_text(s_counter_val_label, "# 0");
+    lv_obj_set_style_text_color(s_counter_val_label, lv_color_hex(0xA855F7), 0);
+    lv_obj_set_style_text_font(s_counter_val_label, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(s_counter_val_label, 6, 20);
+
+    // 右侧：实时反馈
+    lv_obj_t *lbl_action_tag = lv_label_create(card_act);
+    lv_label_set_text(lbl_action_tag, "ACTION");
+    lv_obj_set_style_text_color(lbl_action_tag, lv_color_hex(0x64748B), 0);
+    lv_obj_set_style_text_font(lbl_action_tag, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(lbl_action_tag, 100, 2);
+
+    s_action_val_label = lv_label_create(card_act);
+    lv_label_set_text(s_action_val_label, "Ready");
+    lv_obj_set_style_text_color(s_action_val_label, lv_color_hex(0x38BDF8), 0);
+    lv_obj_set_style_text_font(s_action_val_label, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(s_action_val_label, 100, 20);
 
     s_status_timer = lv_timer_create(status_timer_cb, 500, NULL);
 }
@@ -326,7 +373,7 @@ static void build_ui(void)
 // ================================================================
 void app_main(void)
 {
-    ESP_LOGI(TAG, "=== FoloToy AI Passport BLE HID Keyboard (VibeCoding Pro) ===");
+    ESP_LOGI(TAG, "=== FoloToy AI Passport BLE HID Keyboard (Linear Edition) ===");
 
     // 1. 初始化 NVS
     esp_err_t ret = nvs_flash_init();
